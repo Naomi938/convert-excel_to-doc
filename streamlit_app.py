@@ -93,7 +93,7 @@ if uploaded_file:
     row_12_idx = 11
     if total_rows > row_12_idx:
         row_12  = df_raw.iloc[[row_12_idx]]
-        rest    = pd.concat([df_raw.iloc[1:row_12_idx], df_raw.iloc[row_12_idx + 1:]])
+        rest    = pd.concat([df_raw.iloc[2:row_12_idx], df_raw.iloc[row_12_idx + 1:]])  # מדלג על שורה 2
         df_ordered = pd.concat([row_12, rest], ignore_index=True)
     else:
         df_ordered = df_raw.copy()
