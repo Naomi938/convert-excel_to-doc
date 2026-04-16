@@ -13,54 +13,74 @@ import io
 
 # ── RTL helpers ──────────────────────────────────────────────────────────────
 def make_rtl_para(para):
-    """יישור ימין + RTL לפסקה."""
+    """יישור ימין + RTL לפסקה — גישה אמינה."""
     pPr = para._p.get_or_add_pPr()
-    # כיוון RTL
+    # נקה jc קיים אם יש
+    for existing in pPr.findall(qn('w:jc')):
+        pPr.remove(existing)
+    for existing in pPr.findall(qn('w:bidi')):
+        pPr.remove(existing)
+    # הוסף bidi ו-jc
     bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
     pPr.insert(0, bidi)
-    # יישור לימין
     jc = OxmlElement('w:jc')
     jc.set(qn('w:val'), 'right')
     pPr.append(jc)
+    # יישור גם דרך python-docx
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 def make_rtl_run(run, size_pt, bold=False, color=None, font_name='David'):
     """הגדרת RTL, פונט עברי וסגנון לrun."""
-    run.font.name        = font_name
-    run.font.size        = Pt(size_pt)
-    run.font.bold        = bold
+    run.font.name  = font_name
+    run.font.size  = Pt(size_pt)
+    run.font.bold  = bold
     if color:
         run.font.color.rgb = color
     rPr = run._r.get_or_add_rPr()
-    # RTL לrun
+    # נקה rtl קיים
+    for existing in rPr.findall(qn('w:rtl')):
+        rPr.remove(existing)
     rtl = OxmlElement('w:rtl')
-    rtl.set(qn('w:val'), '1')
     rPr.append(rtl)
-    # פונט עברי ב-complex script
+    # פונט עברי
     rFonts = rPr.find(qn('w:rFonts'))
     if rFonts is None:
         rFonts = OxmlElement('w:rFonts')
         rPr.insert(0, rFonts)
-    rFonts.set(qn('w:cs'), font_name)
+    rFonts.set(qn('w:cs'),    font_name)
     rFonts.set(qn('w:ascii'), font_name)
     rFonts.set(qn('w:hAnsi'), font_name)
+    # גודל complex script
+    szCs = OxmlElement('w:szCs')
+    szCs.set(qn('w:val'), str(int(size_pt * 2)))
+    rPr.append(szCs)
 
 def set_doc_defaults_rtl(doc):
     """הגדרת RTL כברירת מחדל לכל המסמך."""
-    # document settings
+    from docx.oxml.ns import nsmap
+    # settings
     settings_el = doc.settings.element
+    for existing in settings_el.findall(qn('w:bidi')):
+        settings_el.remove(existing)
     bidi_default = OxmlElement('w:bidi')
     settings_el.append(bidi_default)
-    # default paragraph RTL in styles
+    # Normal style
     try:
         normal_style = doc.styles['Normal']
         pPr = normal_style.element.get_or_add_pPr()
+        for existing in pPr.findall(qn('w:bidi')):
+            pPr.remove(existing)
+        for existing in pPr.findall(qn('w:jc')):
+            pPr.remove(existing)
         b = OxmlElement('w:bidi')
-        b.set(qn('w:val'), '1')
         pPr.insert(0, b)
         jc = OxmlElement('w:jc')
         jc.set(qn('w:val'), 'right')
         pPr.append(jc)
+        normal_style.font.name = 'David'
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        normal_style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     except Exception:
         pass
 
