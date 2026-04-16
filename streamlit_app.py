@@ -104,11 +104,14 @@ if uploaded_file:
     answers   = df_ordered.iloc[:, 3] if df_ordered.shape[1] > 3 else pd.Series([""] * len(df_ordered))
 
     qa_pairs = []
-    for q, a in zip(questions, answers):
+    skipped  = []
+    for idx, (q, a) in enumerate(zip(questions, answers)):
         q_str = str(q).strip() if pd.notna(q) else ""
         a_str = str(a).strip() if pd.notna(a) else ""
         if q_str and q_str.lower() != "nan":
             qa_pairs.append((q_str, a_str if a_str.lower() != "nan" else ""))
+        else:
+            skipped.append({"מיקום בסדר": idx + 1, "תוכן עמודה A": repr(q)})
 
     if not qa_pairs:
         st.warning("לא נמצאו שאלות תקינות בעמודה A")
@@ -117,6 +120,10 @@ if uploaded_file:
     st.markdown("### תצוגה מקדימה (5 ראשונות)")
     st.table([{"שאלה": q, "תשובה": a} for q, a in qa_pairs[:5]])
     st.caption(f'סה"כ {len(qa_pairs)} שאלות ותשובות')
+
+    if skipped:
+        with st.expander(f"⚠️ {len(skipped)} שורות דולגו (עמודה A ריקה או לא תקינה)"):
+            st.table(skipped)
 
     doc_title = st.text_input("כותרת המסמך", value="שאלות ותשובות")
 
