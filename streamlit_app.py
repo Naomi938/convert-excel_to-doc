@@ -7,41 +7,70 @@ import streamlit as st
 import pandas as pd
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import io
 
-# ── RTL helper ──────────────────────────────────────────────────────────────
-def set_rtl_paragraph(para):
+# ── RTL helpers ──────────────────────────────────────────────────────────────
+def make_rtl_para(para):
+    """יישור ימין + RTL לפסקה."""
     pPr = para._p.get_or_add_pPr()
+    # כיוון RTL
     bidi = OxmlElement('w:bidi')
     bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
+    pPr.insert(0, bidi)
+    # יישור לימין
     jc = OxmlElement('w:jc')
     jc.set(qn('w:val'), 'right')
     pPr.append(jc)
 
-def set_rtl_run(run):
+def make_rtl_run(run, size_pt, bold=False, color=None, font_name='David'):
+    """הגדרת RTL, פונט עברי וסגנון לrun."""
+    run.font.name        = font_name
+    run.font.size        = Pt(size_pt)
+    run.font.bold        = bold
+    if color:
+        run.font.color.rgb = color
     rPr = run._r.get_or_add_rPr()
+    # RTL לrun
     rtl = OxmlElement('w:rtl')
     rtl.set(qn('w:val'), '1')
     rPr.append(rtl)
-    run.font.name = 'David'
+    # פונט עברי ב-complex script
+    rFonts = rPr.find(qn('w:rFonts'))
+    if rFonts is None:
+        rFonts = OxmlElement('w:rFonts')
+        rPr.insert(0, rFonts)
+    rFonts.set(qn('w:cs'), font_name)
+    rFonts.set(qn('w:ascii'), font_name)
+    rFonts.set(qn('w:hAnsi'), font_name)
 
-def set_doc_rtl(doc):
-    settings = doc.settings.element
-    bidi = OxmlElement('w:bidi')
-    settings.append(bidi)
+def set_doc_defaults_rtl(doc):
+    """הגדרת RTL כברירת מחדל לכל המסמך."""
+    # document settings
+    settings_el = doc.settings.element
+    bidi_default = OxmlElement('w:bidi')
+    settings_el.append(bidi_default)
+    # default paragraph RTL in styles
+    try:
+        normal_style = doc.styles['Normal']
+        pPr = normal_style.element.get_or_add_pPr()
+        b = OxmlElement('w:bidi')
+        b.set(qn('w:val'), '1')
+        pPr.insert(0, b)
+        jc = OxmlElement('w:jc')
+        jc.set(qn('w:val'), 'right')
+        pPr.append(jc)
+    except Exception:
+        pass
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Streamlit UI ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Excel → Word", page_icon="📄", layout="centered")
 
 st.markdown("""
 <style>
     body, .stApp { direction: rtl; }
-    .stTextInput input, .stFileUploader, .stTable, .stDataFrame { direction: rtl; text-align: right; }
-    h1, h2, h3, p, label { text-align: right; }
+    h1,h2,h3,p,label { text-align: right; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -60,13 +89,11 @@ if uploaded_file:
     total_rows = len(df_raw)
     st.success(f"✅ הקובץ נטען — {total_rows} שורות")
 
+    # שורה 12 ראשונה, אחר כך 2,3,4...
     row_12_idx = 11
     if total_rows > row_12_idx:
-        row_12 = df_raw.iloc[[row_12_idx]]
-        rest = pd.concat([
-            df_raw.iloc[1:row_12_idx],
-            df_raw.iloc[row_12_idx + 1:]
-        ])
+        row_12  = df_raw.iloc[[row_12_idx]]
+        rest    = pd.concat([df_raw.iloc[1:row_12_idx], df_raw.iloc[row_12_idx + 1:]])
         df_ordered = pd.concat([row_12, rest], ignore_index=True)
     else:
         df_ordered = df_raw.copy()
@@ -86,15 +113,14 @@ if uploaded_file:
         st.stop()
 
     st.markdown("### תצוגה מקדימה (5 ראשונות)")
-    preview_data = [{"שאלה": q, "תשובה": a} for q, a in qa_pairs[:5]]
-    st.table(preview_data)
+    st.table([{"שאלה": q, "תשובה": a} for q, a in qa_pairs[:5]])
     st.caption(f'סה"כ {len(qa_pairs)} שאלות ותשובות')
 
     doc_title = st.text_input("כותרת המסמך", value="שאלות ותשובות")
 
     if st.button("🔄 צור קובץ Word", type="primary"):
         doc = Document()
-        set_doc_rtl(doc)
+        set_doc_defaults_rtl(doc)
 
         for section in doc.sections:
             section.top_margin    = Inches(1)
@@ -104,45 +130,33 @@ if uploaded_file:
 
         # כותרת
         title_para = doc.add_paragraph()
-        title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        set_rtl_paragraph(title_para)
-        title_run = title_para.add_run(doc_title)
-        title_run.bold = True
-        title_run.font.size = Pt(22)
-        title_run.font.color.rgb = RGBColor(0x2E, 0x40, 0x57)
-        set_rtl_run(title_run)
+        make_rtl_para(title_para)
+        title_para.paragraph_format.space_after = Pt(16)
+        r = title_para.add_run(doc_title)
+        make_rtl_run(r, size_pt=22, bold=True, color=RGBColor(0x2E, 0x40, 0x57))
+
         doc.add_paragraph()
 
+        # שאלות ותשובות
         for i, (q, a) in enumerate(qa_pairs, start=1):
             # שאלה
             q_para = doc.add_paragraph()
-            set_rtl_paragraph(q_para)
+            make_rtl_para(q_para)
             q_para.paragraph_format.space_before = Pt(10)
             q_para.paragraph_format.space_after  = Pt(2)
-            q_num = q_para.add_run(f"{i}. ")
-            q_num.bold = True
-            q_num.font.size = Pt(13)
-            q_num.font.color.rgb = RGBColor(0x2E, 0x40, 0x57)
-            set_rtl_run(q_num)
-            q_text = q_para.add_run(q)
-            q_text.bold = True
-            q_text.font.size = Pt(13)
-            q_text.font.color.rgb = RGBColor(0x2E, 0x40, 0x57)
-            set_rtl_run(q_text)
+            r_num = q_para.add_run(f"{i}. ")
+            make_rtl_run(r_num, size_pt=13, bold=True, color=RGBColor(0x2E, 0x40, 0x57))
+            r_q = q_para.add_run(q)
+            make_rtl_run(r_q, size_pt=13, bold=True, color=RGBColor(0x2E, 0x40, 0x57))
 
             # תשובה
             a_para = doc.add_paragraph()
-            set_rtl_paragraph(a_para)
+            make_rtl_para(a_para)
             a_para.paragraph_format.space_after = Pt(6)
-            a_mark = a_para.add_run("תשובה: ")
-            a_mark.bold = True
-            a_mark.font.size = Pt(12)
-            a_mark.font.color.rgb = RGBColor(0x27, 0xAE, 0x60)
-            set_rtl_run(a_mark)
-            a_text = a_para.add_run(a)
-            a_text.font.size = Pt(12)
-            a_text.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
-            set_rtl_run(a_text)
+            r_label = a_para.add_run("תשובה: ")
+            make_rtl_run(r_label, size_pt=12, bold=True, color=RGBColor(0x27, 0xAE, 0x60))
+            r_a = a_para.add_run(a)
+            make_rtl_run(r_a, size_pt=12, color=RGBColor(0x33, 0x33, 0x33))
 
         buf = io.BytesIO()
         doc.save(buf)
