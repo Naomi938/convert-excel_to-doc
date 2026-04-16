@@ -90,13 +90,15 @@ if uploaded_file:
     st.success(f"✅ הקובץ נטען — {total_rows} שורות")
 
     # שורה 12 ראשונה, אחר כך 2,3,4...
-    row_12_idx = 11
-    if total_rows > row_12_idx:
-        row_12  = df_raw.iloc[[row_12_idx]]
-        rest    = pd.concat([df_raw.iloc[2:row_12_idx], df_raw.iloc[row_12_idx + 1:]])  # מדלג על שורה 2
-        df_ordered = pd.concat([row_12, rest], ignore_index=True)
-    else:
-        df_ordered = df_raw.copy()
+    # סדר: 12, 5, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14... (ללא שורות 1 ו-2)
+    row_12     = df_raw.iloc[[11]]
+    row_5      = df_raw.iloc[[4]]
+    row_3      = df_raw.iloc[[2]]
+    row_4      = df_raw.iloc[[3]]
+    rows_6_11  = df_raw.iloc[5:11]
+    rows_13on  = df_raw.iloc[12:]
+    df_ordered = pd.concat([row_12, row_5, row_3, row_4, rows_6_11, rows_13on], ignore_index=True)
+
 
     questions = df_ordered.iloc[:, 0]
     answers   = df_ordered.iloc[:, 3] if df_ordered.shape[1] > 3 else pd.Series([""] * len(df_ordered))
