@@ -171,7 +171,10 @@ if uploaded_file:
             make_rtl_run(r_a, size_pt=12, color=RGBColor(0x33, 0x33, 0x33))
 
             # ספירת מילים
-            word_count = len(a.split()) if a.strip() else 0
+            # הסר תבנית "מספר)" מתחילת התשובה לפני הספירה
+            import re
+            a_clean = re.sub(r'^\d+\)\s*', '', a.strip())
+            word_count = len(a_clean.split()) if a_clean.strip() else 0
             wc_para = doc.add_paragraph()
             make_rtl_para(wc_para)
             wc_para.paragraph_format.space_after = Pt(6)
