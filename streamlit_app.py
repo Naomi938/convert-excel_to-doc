@@ -11,39 +11,32 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 import io
 
-# ── RTL helpers ──────────────────────────────────────────────────────────────
+# ── RTL helpers ───────────────────────────────────────────────────────────────
 def make_rtl_para(para):
-    """יישור ימין + RTL לפסקה — גישה אמינה."""
     pPr = para._p.get_or_add_pPr()
-    # נקה jc קיים אם יש
     for existing in pPr.findall(qn('w:jc')):
         pPr.remove(existing)
     for existing in pPr.findall(qn('w:bidi')):
         pPr.remove(existing)
-    # הוסף bidi ו-jc
     bidi = OxmlElement('w:bidi')
     pPr.insert(0, bidi)
     jc = OxmlElement('w:jc')
     jc.set(qn('w:val'), 'right')
     pPr.append(jc)
-    # יישור גם דרך python-docx
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 def make_rtl_run(run, size_pt, bold=False, color=None, font_name='David'):
-    """הגדרת RTL, פונט עברי וסגנון לrun."""
-    run.font.name  = font_name
-    run.font.size  = Pt(size_pt)
-    run.font.bold  = bold
+    run.font.name = font_name
+    run.font.size = Pt(size_pt)
+    run.font.bold = bold
     if color:
         run.font.color.rgb = color
     rPr = run._r.get_or_add_rPr()
-    # נקה rtl קיים
     for existing in rPr.findall(qn('w:rtl')):
         rPr.remove(existing)
     rtl = OxmlElement('w:rtl')
     rPr.append(rtl)
-    # פונט עברי
     rFonts = rPr.find(qn('w:rFonts'))
     if rFonts is None:
         rFonts = OxmlElement('w:rFonts')
@@ -51,21 +44,15 @@ def make_rtl_run(run, size_pt, bold=False, color=None, font_name='David'):
     rFonts.set(qn('w:cs'),    font_name)
     rFonts.set(qn('w:ascii'), font_name)
     rFonts.set(qn('w:hAnsi'), font_name)
-    # גודל complex script
     szCs = OxmlElement('w:szCs')
     szCs.set(qn('w:val'), str(int(size_pt * 2)))
     rPr.append(szCs)
 
 def set_doc_defaults_rtl(doc):
-    """הגדרת RTL כברירת מחדל לכל המסמך."""
-    from docx.oxml.ns import nsmap
-    # settings
     settings_el = doc.settings.element
     for existing in settings_el.findall(qn('w:bidi')):
         settings_el.remove(existing)
-    bidi_default = OxmlElement('w:bidi')
-    settings_el.append(bidi_default)
-    # Normal style
+    settings_el.append(OxmlElement('w:bidi'))
     try:
         normal_style = doc.styles['Normal']
         pPr = normal_style.element.get_or_add_pPr()
@@ -109,16 +96,14 @@ if uploaded_file:
     total_rows = len(df_raw)
     st.success(f"✅ הקובץ נטען — {total_rows} שורות")
 
-    # שורה 12 ראשונה, אחר כך 2,3,4...
-    # סדר: 12, 5, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14... (ללא שורות 1 ו-2)
-    row_12     = df_raw.iloc[[11]]
-    row_5      = df_raw.iloc[[4]]
-    row_3      = df_raw.iloc[[2]]
-    row_4      = df_raw.iloc[[3]]
-    rows_6_11  = df_raw.iloc[5:11]
-    rows_13on  = df_raw.iloc[12:]
+    # סדר: 12, 5, 3, 4, 6–11, 13+ (ללא שורות 1 ו-2)
+    row_12    = df_raw.iloc[[11]]
+    row_5     = df_raw.iloc[[4]]
+    row_3     = df_raw.iloc[[2]]
+    row_4     = df_raw.iloc[[3]]
+    rows_6_11 = df_raw.iloc[5:11]
+    rows_13on = df_raw.iloc[12:]
     df_ordered = pd.concat([row_12, row_5, row_3, row_4, rows_6_11, rows_13on], ignore_index=True)
-
 
     questions = df_ordered.iloc[:, 0]
     answers   = df_ordered.iloc[:, 3] if df_ordered.shape[1] > 3 else pd.Series([""] * len(df_ordered))
@@ -162,7 +147,6 @@ if uploaded_file:
         title_para.paragraph_format.space_after = Pt(16)
         r = title_para.add_run(doc_title)
         make_rtl_run(r, size_pt=22, bold=True, color=RGBColor(0x2E, 0x40, 0x57))
-
         doc.add_paragraph()
 
         # שאלות ותשובות
@@ -180,11 +164,20 @@ if uploaded_file:
             # תשובה
             a_para = doc.add_paragraph()
             make_rtl_para(a_para)
-            a_para.paragraph_format.space_after = Pt(6)
+            a_para.paragraph_format.space_after = Pt(2)
             r_label = a_para.add_run("תשובה: ")
             make_rtl_run(r_label, size_pt=12, bold=True, color=RGBColor(0x27, 0xAE, 0x60))
             r_a = a_para.add_run(a)
             make_rtl_run(r_a, size_pt=12, color=RGBColor(0x33, 0x33, 0x33))
+
+            # ספירת מילים
+            word_count = len(a.split()) if a.strip() else 0
+            wc_para = doc.add_paragraph()
+            make_rtl_para(wc_para)
+            wc_para.paragraph_format.space_after = Pt(6)
+            wc_run = wc_para.add_run(f"מילים: {word_count}")
+            make_rtl_run(wc_run, size_pt=9, color=RGBColor(0x99, 0x99, 0x99))
+            wc_run.italic = True
 
         buf = io.BytesIO()
         doc.save(buf)
